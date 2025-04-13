@@ -1,5 +1,11 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+interface Edge {
+  line: THREE.Line;
+  sphere1: THREE.Mesh;
+  sphere2: THREE.Mesh;
+}
 
 export class Graph {
   private scene: THREE.Scene;
@@ -10,6 +16,7 @@ export class Graph {
   private mouse: THREE.Vector2;
 
   private spheres: THREE.Mesh[];
+  private edges: Edge[];
   private firstSelectedSphere: THREE.Mesh | null;
 
   private plane: THREE.Mesh;
@@ -34,6 +41,7 @@ export class Graph {
     this.mouse = new THREE.Vector2();
 
     this.spheres = [];
+    this.edges = [];
     this.firstSelectedSphere = null;
 
     // Create an invisible plane (horizontal) for positioning calculations.
@@ -58,15 +66,24 @@ export class Graph {
   // -----------------------------
   // Event Handlers
   // -----------------------------
-
+  
   private onKeyDown(event: KeyboardEvent): void {
-    if (event.key.toLowerCase() === 'v' && !this.nodeCreationMode) {
+    const key = event.key.toLowerCase();
+    if (key === 'v' && !this.nodeCreationMode) {
       this.nodeCreationMode = true;
       this.previewDistance = 10;
       console.log('Node creation mode enabled.');
       this.controls.enabled = false;
       this.createPreviewSphere();
       this.updatePreviewSpherePosition();
+    } else if (key === 'd') {
+      if (this.firstSelectedSphere) {
+        console.log('Deleting selected node and its associated edges.');
+        this.deleteNodeAndEdges(this.firstSelectedSphere);
+        this.firstSelectedSphere = null;
+      } else {
+        console.log('No node selected for deletion.');
+      }
     }
   }
 
@@ -118,7 +135,7 @@ export class Graph {
   }
 
   // -----------------------------
-  // Node Creation and Preview Methods
+  // Node Creation, Preview, and Deletion Methods
   // -----------------------------
 
   private createPreviewSphere(): void {
@@ -152,10 +169,6 @@ export class Graph {
     this.nodeCreationMode = false;
     this.controls.enabled = true;
   }
-
-  // -----------------------------
-  // Node and Edge Creation
-  // -----------------------------
 
   public createSphere(position: THREE.Vector3): void {
     const sphereRadius = 0.5;
@@ -195,6 +208,21 @@ export class Graph {
     const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
     const line = new THREE.Line(geometry, material);
     this.scene.add(line);
+
+    // Store edge for potential deletion later
+    this.edges.push({ line, sphere1, sphere2 });
+  }
+
+  private deleteNodeAndEdges(node: THREE.Mesh): void {
+    this.scene.remove(node);
+    this.spheres = this.spheres.filter(s => s !== node);
+
+    const edgesToDelete = this.edges.filter(edge => edge.sphere1 === node || edge.sphere2 === node);
+    edgesToDelete.forEach(edge => {
+      this.scene.remove(edge.line);
+    });
+
+    this.edges = this.edges.filter(edge => edge.sphere1 !== node && edge.sphere2 !== node);
   }
 
   // -----------------------------
