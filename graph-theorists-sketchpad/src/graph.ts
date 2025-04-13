@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 
 interface Edge {
-  line: THREE.Line;
+  line: THREE.Object3D;
   sphere1: THREE.Mesh;
   sphere2: THREE.Mesh;
 }
@@ -18,6 +21,7 @@ export class Graph {
   private spheres: THREE.Mesh[];
   private edges: Edge[];
   private firstSelectedSphere: THREE.Mesh | null;
+  private selectedEdge: Edge | null;
 
   private plane: THREE.Mesh;
 
@@ -43,6 +47,7 @@ export class Graph {
     this.spheres = [];
     this.edges = [];
     this.firstSelectedSphere = null;
+    this.selectedEdge = null;
 
     // Create an invisible plane (horizontal) for positioning calculations.
     const planeGeo = new THREE.PlaneGeometry(200, 200);
@@ -59,7 +64,7 @@ export class Graph {
     this.renderer.domElement.addEventListener('click', this.onClick.bind(this), false);
     this.renderer.domElement.addEventListener('contextmenu', this.onRightClick.bind(this), false);
     window.addEventListener('mousemove', this.onMouseMove.bind(this), false);
-    window.addEventListener('wheel', this.onWheel.bind(this), false);
+    window.addEventListener('wheel', this.onWheel.bind(this), { passive: false, capture: true });
     window.addEventListener('keydown', this.onKeyDown.bind(this), false);
   }
 
@@ -81,17 +86,34 @@ export class Graph {
         console.log('Deleting selected node and its associated edges.');
         this.deleteNodeAndEdges(this.firstSelectedSphere);
         this.firstSelectedSphere = null;
+      } else if (this.selectedEdge) {
+        console.log('Deleting selected edge.');
+        this.deleteEdge(this.selectedEdge);
+        this.selectedEdge = null;
       } else {
-        console.log('No node selected for deletion.');
+        console.log('No node or edge selected for deletion.');
       }
     }
   }
 
   private onRightClick(event: MouseEvent): void {
+    event.preventDefault();
+
     if (this.nodeCreationMode) {
-      event.preventDefault();
       this.exitNodeCreationMode();
       console.log('Node creation mode canceled.');
+    } else {
+      if (this.firstSelectedSphere) {
+        if (this.firstSelectedSphere.material instanceof THREE.MeshPhongMaterial) {
+          this.firstSelectedSphere.material.emissive.set(0x000000);
+        }
+        this.firstSelectedSphere = null;
+        console.log('Node deselected.');
+      }
+      if (this.selectedEdge) {
+        this.deselectEdge();
+        console.log('Edge deselected.');
+      }
     }
   }
 
@@ -126,11 +148,29 @@ export class Graph {
       return;
     }
 
-    // Not in node creation mode: try to select an existing sphere for edge creation.
-    const intersects = this.raycaster.intersectObjects(this.spheres);
-    if (intersects.length > 0) {
-      const clickedSphere = intersects[0].object as THREE.Mesh;
+    const sphereIntersections = this.raycaster.intersectObjects(this.spheres);
+    if (sphereIntersections.length > 0) {
+      if (this.selectedEdge) {
+        this.deselectEdge();
+      }
+      const clickedSphere = sphereIntersections[0].object as THREE.Mesh;
       this.handleSphereClick(clickedSphere);
+      return;
+    }
+
+    (this.raycaster as any).linePrecision = 0.1;
+    const edgeIntersections = this.raycaster.intersectObjects(this.edges.map(e => e.line));
+    if (edgeIntersections.length > 0) {
+      const clickedLine = edgeIntersections[0].object as THREE.Object3D;
+      const edge = this.edges.find(e => e.line === clickedLine);
+      if (edge) {
+        if (this.selectedEdge === edge) {
+          this.deselectEdge();
+        } else {
+          this.selectEdge(edge);
+        }
+      }
+      return;
     }
   }
 
@@ -188,6 +228,9 @@ export class Graph {
       if (clickedSphere.material instanceof THREE.MeshPhongMaterial) {
         clickedSphere.material.emissive.set(0x333333);
       }
+      if (this.selectedEdge) {
+        this.deselectEdge();
+      }
     } else if (this.firstSelectedSphere === clickedSphere) {
       if (clickedSphere.material instanceof THREE.MeshPhongMaterial) {
         clickedSphere.material.emissive.set(0x000000);
@@ -202,11 +245,27 @@ export class Graph {
     }
   }
 
+  // -----------------------------
+  // Edge Creation & Deletion Methods
+  // -----------------------------
+
   public createEdge(sphere1: THREE.Mesh, sphere2: THREE.Mesh): void {
-    const points: THREE.Vector3[] = [sphere1.position, sphere2.position];
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
-    const line = new THREE.Line(geometry, material);
+    const positions = [
+      sphere1.position.x, sphere1.position.y, sphere1.position.z,
+      sphere2.position.x, sphere2.position.y, sphere2.position.z
+    ];
+
+    const geometry = new LineGeometry();
+    geometry.setPositions(positions);
+
+    const material = new LineMaterial({
+      color: 0xff0000,
+      linewidth: 5,
+      resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+    });
+
+    const line = new Line2(geometry, material);
+    line.computeLineDistances();
     this.scene.add(line);
 
     // Store edge for potential deletion later
@@ -223,6 +282,33 @@ export class Graph {
     });
 
     this.edges = this.edges.filter(edge => edge.sphere1 !== node && edge.sphere2 !== node);
+  }
+
+  private deleteEdge(edge: Edge): void {
+    this.scene.remove(edge.line);
+    this.edges = this.edges.filter(e => e !== edge);
+  }
+
+  private selectEdge(edge: Edge): void {
+    if (this.selectedEdge && this.selectedEdge !== edge) {
+      this.deselectEdge();
+    }
+
+    if ((edge.line as any).material) {
+      (edge.line as any).material.color.set(0x00ff00);
+      (edge.line as any).material.needsUpdate = true;
+    }
+
+    this.selectedEdge = edge;
+  }
+
+  private deselectEdge(): void {
+    if (this.selectedEdge && (this.selectedEdge.line as any).material) {
+      (this.selectedEdge.line as any).material.color.set(0xff0000);
+      (this.selectedEdge.line as any).material.needsUpdate = true;
+    }
+
+    this.selectedEdge = null;
   }
 
   // -----------------------------
