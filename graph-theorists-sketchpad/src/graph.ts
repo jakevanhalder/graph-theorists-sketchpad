@@ -79,8 +79,8 @@ export class Graph {
       this.previewDistance = 10;
       console.log('Node creation mode enabled.');
       this.controls.enabled = false;
-      this.createPreviewSphere();
-      this.updatePreviewSpherePosition();
+      this.createPreviewNode();
+      this.updatePreviewNodePosition();
     } else if (key === 'd') {
       if (this.firstSelectedSphere) {
         console.log('Deleting selected node and its associated edges.');
@@ -122,7 +122,7 @@ export class Graph {
     this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
     if (this.nodeCreationMode && this.previewSphere) {
-      this.updatePreviewSpherePosition();
+      this.updatePreviewNodePosition();
     }
   }
 
@@ -134,7 +134,7 @@ export class Graph {
       // Adjust the preview distance (scroll up to decrease, scroll down to increase)
       this.previewDistance += event.deltaY * 0.05;
       if (this.previewDistance < 1) this.previewDistance = 1;
-      this.updatePreviewSpherePosition();
+      this.updatePreviewNodePosition();
     }
   }
 
@@ -143,7 +143,7 @@ export class Graph {
 
     if (this.nodeCreationMode && this.previewSphere) {
       // Confirm node placement using the current preview sphere position.
-      this.createSphere(this.previewSphere.position.clone());
+      this.createNode(this.previewSphere.position.clone());
       this.exitNodeCreationMode();
       return;
     }
@@ -154,7 +154,7 @@ export class Graph {
         this.deselectEdge();
       }
       const clickedSphere = sphereIntersections[0].object as THREE.Mesh;
-      this.handleSphereClick(clickedSphere);
+      this.selectNode(clickedSphere);
       return;
     }
 
@@ -178,7 +178,7 @@ export class Graph {
   // Node Creation, Preview, and Deletion Methods
   // -----------------------------
 
-  private createPreviewSphere(): void {
+  private createPreviewNode(): void {
     const geometry = new THREE.SphereGeometry(0.5, 32, 16);
     const material = new THREE.MeshPhongMaterial({
       color: '#0077ff',
@@ -189,7 +189,7 @@ export class Graph {
     this.scene.add(this.previewSphere);
   }
 
-  private updatePreviewSpherePosition(): void {
+  private updatePreviewNodePosition(): void {
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
     const newPos = new THREE.Vector3()
@@ -210,7 +210,7 @@ export class Graph {
     this.controls.enabled = true;
   }
 
-  public createSphere(position: THREE.Vector3): void {
+  public createNode(position: THREE.Vector3): void {
     const sphereRadius = 0.5;
     const widthSegments = 32;
     const heightSegments = 16;
@@ -222,7 +222,7 @@ export class Graph {
     this.spheres.push(sphere);
   }
 
-  private handleSphereClick(clickedSphere: THREE.Mesh): void {
+  private selectNode(clickedSphere: THREE.Mesh): void {
     if (!this.firstSelectedSphere) {
       this.firstSelectedSphere = clickedSphere;
       if (clickedSphere.material instanceof THREE.MeshPhongMaterial) {
@@ -243,6 +243,14 @@ export class Graph {
       }
       this.firstSelectedSphere = null;
     }
+  }
+
+  private deselectNode(): void {
+    if (this.firstSelectedSphere != null && this.firstSelectedSphere.material instanceof THREE.MeshPhongMaterial) {
+      this.firstSelectedSphere.material.emissive.set(0x000000);
+    }
+
+    this.firstSelectedSphere = null;
   }
 
   // -----------------------------
@@ -294,6 +302,10 @@ export class Graph {
       this.deselectEdge();
     }
 
+    if (this.firstSelectedSphere != null) {
+      this.deselectNode();
+    }
+
     if ((edge.line as any).material) {
       (edge.line as any).material.color.set(0x00ff00);
       (edge.line as any).material.needsUpdate = true;
@@ -303,7 +315,7 @@ export class Graph {
   }
 
   private deselectEdge(): void {
-    if (this.selectedEdge && (this.selectedEdge.line as any).material) {
+    if (this.selectedEdge && (this.selectedEdge.line as any)) {
       (this.selectedEdge.line as any).material.color.set(0xff0000);
       (this.selectedEdge.line as any).material.needsUpdate = true;
     }
