@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { CSS2DObject } from 'three/examples/jsm/Addons.js';
 
 interface Edge {
   line: THREE.Object3D;
@@ -29,6 +30,10 @@ export class Graph {
   private nodeCreationMode: boolean = false;
   private previewSphere: THREE.Mesh | null = null;
   private previewDistance: number = 10;
+
+  // ID counters
+  private nodeCounter: number = 0;
+  private edgeCounter: number = 0;
 
   constructor(
     scene: THREE.Scene,
@@ -71,7 +76,7 @@ export class Graph {
   // -----------------------------
   // Event Handlers
   // -----------------------------
-  
+
   private onKeyDown(event: KeyboardEvent): void {
     const key = event.key.toLowerCase();
     if (key === 'v' && !this.nodeCreationMode) {
@@ -211,6 +216,8 @@ export class Graph {
   }
 
   public createNode(position: THREE.Vector3): void {
+    const nodeId = ++this.nodeCounter;
+
     const sphereRadius = 0.5;
     const widthSegments = 32;
     const heightSegments = 16;
@@ -220,6 +227,17 @@ export class Graph {
     sphere.position.copy(position);
     this.scene.add(sphere);
     this.spheres.push(sphere);
+
+    const div = document.createElement('div');
+    div.className = 'node-label';
+    div.textContent = String('v' + nodeId);
+    div.style.marginTop = '-1em';
+    div.style.color = 'white';
+    div.style.fontSize = '16px';
+
+    const label = new CSS2DObject(div);
+    label.position.set(0, sphereRadius + 0.2, 0);
+    sphere.add(label);
   }
 
   private selectNode(clickedSphere: THREE.Mesh): void {
@@ -258,6 +276,8 @@ export class Graph {
   // -----------------------------
 
   public createEdge(sphere1: THREE.Mesh, sphere2: THREE.Mesh): void {
+    const edgeId = ++this.edgeCounter;
+  
     const positions = [
       sphere1.position.x, sphere1.position.y, sphere1.position.z,
       sphere2.position.x, sphere2.position.y, sphere2.position.z
@@ -278,9 +298,27 @@ export class Graph {
 
     // Store edge for potential deletion later
     this.edges.push({ line, sphere1, sphere2 });
+
+    const div = document.createElement('div');
+    div.className = 'edge-label';
+    div.textContent = 'e' + edgeId;
+    div.style.marginTop = '-1em';
+    div.style.color = 'white';
+    div.style.fontSize = '16px';
+
+    const label = new CSS2DObject(div);
+    const midPoint = new THREE.Vector3().addVectors(sphere1.position, sphere2.position).multiplyScalar(0.5);
+    const midPointLocal = midPoint.clone();
+    line.worldToLocal(midPointLocal);
+    label.position.copy(midPointLocal);
+    line.add(label);
   }
 
   private deleteNodeAndEdges(node: THREE.Mesh): void {
+    --this.nodeCounter;
+    node.children
+      .filter(child => child instanceof CSS2DObject)
+      .forEach(label => node.remove(label));
     this.scene.remove(node);
     this.spheres = this.spheres.filter(s => s !== node);
 
@@ -293,6 +331,10 @@ export class Graph {
   }
 
   private deleteEdge(edge: Edge): void {
+    --this.edgeCounter;
+    edge.line.children
+      .filter(child => child instanceof CSS2DObject)
+      .forEach(label => edge.line.remove(label));
     this.scene.remove(edge.line);
     this.edges = this.edges.filter(e => e !== edge);
   }
@@ -329,7 +371,7 @@ export class Graph {
 
   public update(): void {
     if (this.previewSphere) {
-      const scaleFactor = 1 + 0.2 * Math.sin(Date.now() * 0.005);
+      const scaleFactor = 1 + 0.05 * Math.sin(Date.now() * 0.005);
       this.previewSphere.scale.set(scaleFactor, scaleFactor, scaleFactor);
     }
   }
