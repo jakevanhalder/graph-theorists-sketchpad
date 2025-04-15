@@ -1,10 +1,14 @@
+import * as THREE from 'three';
 import GUI from 'lil-gui';
 import { Graph } from './graph';
+import { CSS2DObject } from 'three/examples/jsm/Addons.js';
 
 export class GraphGUI {
     private gui: GUI;
     private params: any;
     private graph: Graph;
+    private nodeFolder!: GUI;
+    private nodeLabelController!: any;
 
     constructor(graph: Graph) {
         this.graph = graph;
@@ -15,7 +19,7 @@ export class GraphGUI {
             edgeColor: '#ff0000',
             nodeRadius: 0.5,
             edgeThickness: 5,
-            enableNodeCreation: false,
+            nodeLabel: '',
             clearGraph: () => {
                 console.log('Clear Graph button pressed.');
                 // Implement method to clear all nodes and edges.
@@ -23,26 +27,42 @@ export class GraphGUI {
         };
 
         this.setupGUI();
+
+        this.graph.onNodeSelected = (node) => {
+            let currentLabel = '';
+            node.children.forEach(child => {
+                if (child instanceof CSS2DObject) {
+                    currentLabel = child.element.textContent || '';
+                }
+            });
+            this.params.nodeLabel = currentLabel;
+            this.nodeLabelController.updateDisplay();
+
+            (this.nodeFolder.domElement as HTMLElement).style.display = 'block';
+
+            this.graph.onNodeDeselected = () => {
+                (this.nodeFolder.domElement as HTMLElement).style.display = 'none';
+            };
+        };
     }
 
     private setupGUI(): void {
-        const nodeFolder = this.gui.addFolder('Node Settings');
-        nodeFolder.addColor(this.params, 'nodeColor').name('Color').onChange((value: string) => {
-            // Update default node color in the graph (for new nodes)
-        });
-        nodeFolder.add(this.params, 'nodeRadius', 0.1, 2).name('Radius').onChange((value: number) => {
-            // Update default node radius
+        this.nodeFolder = this.gui.addFolder('Node Settings');
+        (this.nodeFolder.domElement as HTMLElement).style.display = 'none';
+
+        this.nodeFolder.addColor(this.params, 'nodeColor').name('Color').onChange((value: string) => {
+            const selectedNode = this.graph.getSelectedNode();
+            if (selectedNode && selectedNode.material instanceof THREE.MeshPhongMaterial) {
+                selectedNode.material.color.set(value);
+            }
         });
 
-        const edgeFolder = this.gui.addFolder('Edge Settings');
-        edgeFolder.addColor(this.params, 'edgeColor').name('Color').onChange((value: string) => {
-            // Update default edge color
-        });
-        edgeFolder.add(this.params, 'edgeThickness', 1, 10).name('Thickness').onChange((value: number) => {
-            // Update default edge thickness
+        this.nodeLabelController = this.nodeFolder.add(this.params, 'nodeLabel').name('Label').onFinishChange((newLabel: string) => {
+            if (this.graph.getSelectedNode()) {
+                this.graph.updateNodeLabel(newLabel);
+            }
         });
 
-        // Option to clear all graph objects.
         this.gui.add(this.params, 'clearGraph').name('Clear Graph');
     }
 }
