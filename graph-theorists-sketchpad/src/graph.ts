@@ -39,6 +39,9 @@ export class Graph {
   public onNodeSelected: ((node: THREE.Mesh) => void) | null = null;
   public onNodeDeselected: (() => void) | null = null;
 
+  // Dragging functionality flag
+  private dragActive: boolean = false;
+
   constructor(
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
@@ -75,6 +78,7 @@ export class Graph {
     window.addEventListener('mousemove', this.onMouseMove.bind(this), false);
     window.addEventListener('wheel', this.onWheel.bind(this), { passive: false, capture: true });
     window.addEventListener('keydown', this.onKeyDown.bind(this), false);
+    window.addEventListener('mouseup', this.onMouseUp.bind(this), false);
   }
 
   // -----------------------------
@@ -90,6 +94,11 @@ export class Graph {
       this.controls.enabled = false;
       this.createPreviewNode();
       this.updatePreviewNodePosition();
+    } else if (key === 'm') {
+      if (this.getSelectedNode()) {
+        this.dragActive = true;
+        console.log('Drag mode enabled for selected node.');
+      }
     } else if (key === 'd') {
       if (this.firstSelectedSphere) {
         console.log('Deleting selected node and its associated edges.');
@@ -139,6 +148,16 @@ export class Graph {
     if (this.nodeCreationMode && this.previewSphere) {
       this.updatePreviewNodePosition();
     }
+    if (this.dragActive && this.firstSelectedSphere) {
+      const node = this.firstSelectedSphere;
+      const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -node.position.y);
+      const newPos = new THREE.Vector3();
+      this.raycaster.setFromCamera(this.mouse, this.camera);
+      if (this.raycaster.ray.intersectPlane(dragPlane, newPos)) {
+        node.position.copy(newPos);
+        this.updateEdgesForNode(node);
+      }
+    }
   }
 
   private onWheel(event: WheelEvent): void {
@@ -150,6 +169,13 @@ export class Graph {
       this.previewDistance += event.deltaY * 0.05;
       if (this.previewDistance < 1) this.previewDistance = 1;
       this.updatePreviewNodePosition();
+    }
+  }
+
+  private onMouseUp(_event: MouseEvent): void {
+    if (this.dragActive) {
+      this.dragActive = false;
+      console.log('Drag mode disabled.');
     }
   }
 
@@ -266,9 +292,6 @@ export class Graph {
       }
     } else if (this.firstSelectedSphere === clickedSphere) {
       this.deselectNode();
-      if (this.onNodeDeselected) {
-        this.onNodeDeselected();
-      }
     } else {
       this.createEdge(this.firstSelectedSphere, clickedSphere);
       this.deselectNode();
@@ -421,6 +444,27 @@ export class Graph {
       count++;
     });
     this.edgeCounter = this.edges.length;
+  }
+
+  private updateEdgesForNode(node: THREE.Mesh): void {
+    this.edges.forEach(edge => {
+      if (edge.sphere1 === node || edge.sphere2 === node) {
+        const posArray = [
+          edge.sphere1.position.x, edge.sphere1.position.y, edge.sphere1.position.z,
+          edge.sphere2.position.x, edge.sphere2.position.y, edge.sphere2.position.z,
+        ];
+        (edge.line as any).geometry.setPositions(posArray);
+        // Update label position.
+        edge.line.children.forEach(child => {
+          if (child instanceof CSS2DObject) {
+            const mid = new THREE.Vector3().addVectors(edge.sphere1.position, edge.sphere2.position).multiplyScalar(0.5);
+            const midLocal = mid.clone();
+            edge.line.worldToLocal(midLocal);
+            child.position.copy(midLocal);
+          }
+        });
+      }
+    });
   }
 
   // -----------------------------
