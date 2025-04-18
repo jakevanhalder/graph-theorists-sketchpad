@@ -796,6 +796,76 @@ export class Graph {
     console.log('Highlights and checks have been reset.');
   }
 
+  public checkBipartite(): { bipartite: boolean, partitions?: Map<THREE.Mesh, number> } {
+    const n = this.spheres.length;
+    const nodeToIndex = new Map<THREE.Mesh, number>();
+    this.spheres.forEach((node, i) => nodeToIndex.set(node, i));
+
+    const adj: number[][] = Array.from({ length: n }, () => []);
+    this.edges.forEach(edge => {
+      if (edge.sphere1 === edge.sphere2) return;
+      const i = nodeToIndex.get(edge.sphere1)!;
+      const j = nodeToIndex.get(edge.sphere2)!;
+      adj[i].push(j);
+      adj[j].push(i);
+    });
+
+    const colors = new Array(n).fill(-1);
+    let bipartite = true;
+
+    for (let i = 0; i < n; i++) {
+      if (colors[i] === -1) {
+        colors[i] = 0;
+        const queue: number[] = [i];
+        while (queue.length) {
+          const u = queue.shift()!;
+          for (const v of adj[u]) {
+            if (colors[v] === -1) {
+              colors[v] = 1 - colors[u];
+              queue.push(v);
+            } else if (colors[v] === colors[u]) {
+              bipartite = false;
+              break;
+            }
+          }
+          if (!bipartite) break;
+        }
+      }
+      if (!bipartite) break;
+    }
+
+    const partitions = new Map<THREE.Mesh, number>();
+    this.spheres.forEach((node, i) => {
+      partitions.set(node, colors[i]);
+    });
+
+    return { bipartite, partitions };
+  }
+
+  public applyBipartiteCheck(): boolean {
+    const { bipartite, partitions } = this.checkBipartite();
+    if (bipartite && partitions) {
+      this.spheres.forEach(node => {
+        const partition = partitions.get(node);
+        if (node.material instanceof THREE.MeshPhongMaterial) {
+          if (partition === 0) {
+            node.material.color.set('#0077ff');
+          } else {
+            node.material.color.set('#00ff00');
+          }
+        }
+      });
+    } else {
+      this.spheres.forEach(node => {
+        if (node.material instanceof THREE.MeshPhongMaterial) {
+          node.material.color.set('#ff0000');
+        }
+      });
+    }
+
+    return bipartite;
+  }
+
   // -----------------------------
   // Update Method for Animation Loop
   // -----------------------------

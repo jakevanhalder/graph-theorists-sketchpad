@@ -28,6 +28,12 @@ export class GraphGUI {
                 console.log('View Bridge Edges button pressed.');
                 this.graph.highlightBridges();
             },
+            checkBipartite: () => {
+                console.log('Check Bipartite button pressed.');
+                const result = this.graph.applyBipartiteCheck();
+                const message = result ? "Graph is bipartite." : "Graph is not bipartite.";
+                alert(message);
+            },
             stopChecks: () => {
                 console.log('Stop Checks button pressed.');
                 this.graph.resetHighlights();
@@ -87,6 +93,7 @@ export class GraphGUI {
 
         this.gui.add(this.params, 'viewGraphComponents').name("View Graph Components");
         this.gui.add(this.params, 'viewBridgeEdges').name("View Bridge Edges");
+        this.gui.add(this.params, 'checkBipartite').name('Check Bipartite');
         this.gui.add(this.params, 'stopChecks').name('Stop Checks');
         this.gui.add(this.params, 'clearGraph').name('Clear Graph');
     }
