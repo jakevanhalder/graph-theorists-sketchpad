@@ -138,6 +138,11 @@ svg {
   z-index: 100;
 }
 
+#degree-info {
+  display: none;
+  margin-left: 1em;
+}
+
 p {
   position: absolute;
 }

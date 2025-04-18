@@ -47,14 +47,33 @@ const graph = new Graph(scene, camera, renderer, controls);
 // Instantiate our GUI
 new GraphGUI(graph);
 
-// Status bar
-const statusBar = document.getElementById('status-bar');
+// Status bar and degree info
+const vertexCount = document.getElementById('vertex-count');
+const edgeCount   = document.getElementById('edge-count');
+const degreeInfo  = document.getElementById('degree-info');
+
+if (!vertexCount || !edgeCount || !degreeInfo) {
+  console.warn('Missing status bar elements');
+}
 
 // Whenever the graph changes, update the status bar:
 graph.onGraphChanged = () => {
-  if (statusBar) {
-    statusBar.textContent = `Vertices: ${graph.getNodeCount()} | Edges: ${graph.getEdgeCount()}`;
+  if (vertexCount) vertexCount.textContent = `${graph.getNodeCount()}`;
+  if (edgeCount)   edgeCount.textContent   = `${graph.getEdgeCount()}`;
+  if (degreeInfo) degreeInfo.style.display = 'none';
+};
+
+graph.onNodeSelected = (node) => {
+  const deg = graph.getDegree(node);
+  if (degreeInfo) {
+    degreeInfo.textContent = `Degree: ${deg}`;
+    degreeInfo.style.display = 'inline';
   }
+};
+
+// When the user deselects:
+graph.onNodeDeselected = () => {
+  if (degreeInfo) degreeInfo.style.display = 'none';
 };
 
 graph.onGraphChanged();

@@ -55,6 +55,11 @@ export class Graph {
     return this.edges.length;
   }
 
+  // Get the degree of a node
+  public getDegree(node: THREE.Mesh): number {
+    return this.edges.filter(e => e.sphere1 === node || e.sphere2 === node).length;
+  }
+
   constructor(
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,

@@ -1,19 +1,26 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Graph Theorists Sketchpad</title>
-  </head>
-  <body>
-    <div id="app">
-      <div>
-        <p class="title">Graph Theorists Sketchpad</p>
-      </div>
-      <div id="status-bar">Vertices: 0 | Edges: 0</div>
 
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Graph Theorists Sketchpad</title>
+</head>
+
+<body>
+  <div id="app">
+    <div>
+      <p class="title">Graph Theorists Sketchpad</p>
+      <div id="status-bar">
+        Vertices: <span id="vertex-count">0</span> |
+        Edges: <span id="edge-count">0</span>
+        <span id="degree-info">
+          Degree: 0
+        </span>
+      </div>
     </div>
     <script type="module" id="c" src="/src/main.ts"></script>
-  </body>
+</body>
+
 </html>
