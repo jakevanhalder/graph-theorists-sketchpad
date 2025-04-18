@@ -271,6 +271,8 @@ export class Graph {
     this.scene.add(sphere);
     this.spheres.push(sphere);
 
+    sphere.userData.radius = sphereRadius;
+
     const div = document.createElement('div');
     div.className = 'node-label';
     div.textContent = 'v' + nodeId;
@@ -343,14 +345,19 @@ export class Graph {
     return positions;
   }
 
-  private createLoopEdgePoints(node: THREE.Mesh, loopRadius: number): number[] {
+  private createLoopEdgePoints(
+    node: THREE.Mesh,
+    loopRadius: number,
+    bulge: number
+  ): number[] {
     const segments = 32;
     const positions: number[] = [];
     for (let i = 0; i <= segments; i++) {
-      const theta = (i / segments) * Math.PI * 2;
-      const x = node.position.x + loopRadius * Math.cos(theta);
+      const theta = (i / segments) * Math.PI;
+      const r = loopRadius + bulge * Math.sin(theta);
+      const x = node.position.x + r * Math.cos(theta);
       const y = node.position.y;
-      const z = node.position.z + loopRadius * Math.sin(theta);
+      const z = node.position.z + r * Math.sin(theta);
       positions.push(x, y, z);
     }
     return positions;
@@ -367,12 +374,21 @@ export class Graph {
     let usedOffset: number | undefined = undefined;
 
     if (sphere1 === sphere2) {
+      const existingLoop = this.edges.find(edge =>
+        edge.isLoop && edge.sphere1 === sphere1
+      );
+      if (existingLoop) {
+        console.log('A loop already exists for this node');
+        return;
+      }
       isLoop = true;
-      const loopRadius = 1.5;
-      positions = this.createLoopEdgePoints(sphere1, loopRadius);
+      const sphereRadius = sphere1.userData.radius as number;
+      const loopRadius = sphereRadius;
+      const bulge = 0.3;
+      positions = this.createLoopEdgePoints(sphere1, loopRadius, bulge);
     } else {
       const parallelCount = this.edges.filter(edge =>
-        (!edge.isLoop) &&
+        !edge.isLoop &&
         ((edge.sphere1 === sphere1 && edge.sphere2 === sphere2) ||
          (edge.sphere1 === sphere2 && edge.sphere2 === sphere1))
       ).length;
@@ -481,8 +497,7 @@ export class Graph {
     if (this.selectedEdge && this.selectedEdge !== edge) {
       this.deselectEdge();
     }
-
-    if (this.firstSelectedSphere != null) {
+    if (this.firstSelectedSphere) {
       this.deselectNode();
     }
 
@@ -535,8 +550,9 @@ export class Graph {
       if (edge.sphere1 === node || edge.sphere2 === node) {
         let positions: number[] = [];
         if (edge.isLoop) {
-          const loopRadius = 1.5;
-          positions = this.createLoopEdgePoints(edge.sphere1, loopRadius);
+          const sphereRadius = edge.sphere1.userData.radius as number;
+          const bulge = 0.3;
+          positions = this.createLoopEdgePoints(edge.sphere1, sphereRadius, bulge);
         } else {
           const offset = edge.parallelOffset || 0;
           positions = this.createCurvedEdgePoints(edge.sphere1, edge.sphere2, offset);
@@ -582,13 +598,17 @@ export class Graph {
     );
     const count = relatedEdges.length;
     if (count <= 1) return;
+
     relatedEdges.sort((a, b) => (a.parallelOffset || 0) - (b.parallelOffset || 0));
     const mid = Math.floor(count / 2);
+
     relatedEdges.forEach((edge, i) => {
       const newOffset = (i - mid) * baseOffset;
       edge.parallelOffset = newOffset;
+
       const positions = this.createCurvedEdgePoints(edge.sphere1, edge.sphere2, newOffset);
       (edge.line as any).geometry.setPositions(positions);
+
       edge.line.children.forEach(child => {
         if (child instanceof CSS2DObject) {
           const midIdx = Math.floor(positions.length / 6);
