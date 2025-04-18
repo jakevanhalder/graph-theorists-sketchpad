@@ -6,9 +6,11 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { CSS2DObject } from 'three/examples/jsm/Addons.js';
 
 interface Edge {
-  line: THREE.Object3D;
+  line: Line2;
   sphere1: THREE.Mesh;
   sphere2: THREE.Mesh;
+  isLoop: boolean;
+  parallelOffset?: number; 
 }
 
 export class Graph {
@@ -72,7 +74,7 @@ export class Graph {
     this.plane.rotation.x = -Math.PI / 2;
     this.scene.add(this.plane);
 
-    // Listeners: clicks, contextmenu (right-click), mousemove, wheel, and keydown.
+    // Event listeners.
     this.renderer.domElement.addEventListener('click', this.onClick.bind(this), false);
     this.renderer.domElement.addEventListener('contextmenu', this.onRightClick.bind(this), false);
     window.addEventListener('mousemove', this.onMouseMove.bind(this), false);
@@ -109,7 +111,12 @@ export class Graph {
         this.firstSelectedSphere = null;
       } else if (this.selectedEdge) {
         console.log('Deleting selected edge.');
+        const s1 = this.selectedEdge.sphere1;
+        const s2 = this.selectedEdge.sphere2;
         this.deleteEdge(this.selectedEdge);
+        if (s1 !== s2) {
+          this.updateParallelEdgesForNodes(s1, s2);
+        }
         this.selectedEdge = null;
       } else {
         console.log('No node or edge selected for deletion.');
@@ -290,8 +297,6 @@ export class Graph {
       if (this.onNodeSelected) {
         this.onNodeSelected(clickedSphere);
       }
-    } else if (this.firstSelectedSphere === clickedSphere) {
-      this.deselectNode();
     } else {
       this.createEdge(this.firstSelectedSphere, clickedSphere);
       this.deselectNode();
@@ -321,16 +326,63 @@ export class Graph {
   }
 
   // -----------------------------
+  // New Helper Functions for Curved and Loop Edges
+  // -----------------------------
+
+  private createCurvedEdgePoints(sphere1: THREE.Mesh, sphere2: THREE.Mesh, offset: number): number[] {
+    const midPoint = new THREE.Vector3().addVectors(sphere1.position, sphere2.position).multiplyScalar(0.5);
+    const direction = new THREE.Vector3().subVectors(sphere2.position, sphere1.position);
+    const perp = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+    const controlPoint = midPoint.clone().add(perp.multiplyScalar(offset));
+    const curve = new THREE.QuadraticBezierCurve3(sphere1.position, controlPoint, sphere2.position);
+    const curvePoints = curve.getPoints(20);
+    const positions: number[] = [];
+    curvePoints.forEach(pt => {
+      positions.push(pt.x, pt.y, pt.z);
+    });
+    return positions;
+  }
+
+  private createLoopEdgePoints(node: THREE.Mesh, loopRadius: number): number[] {
+    const segments = 32;
+    const positions: number[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const theta = (i / segments) * Math.PI * 2;
+      const x = node.position.x + loopRadius * Math.cos(theta);
+      const y = node.position.y;
+      const z = node.position.z + loopRadius * Math.sin(theta);
+      positions.push(x, y, z);
+    }
+    return positions;
+  }
+
+  // -----------------------------
   // Edge Creation & Deletion Methods
   // -----------------------------
 
   public createEdge(sphere1: THREE.Mesh, sphere2: THREE.Mesh): void {
     const edgeId = ++this.edgeCounter;
+    let positions: number[] = [];
+    let isLoop = false;
+    let usedOffset: number | undefined = undefined;
 
-    const positions = [
-      sphere1.position.x, sphere1.position.y, sphere1.position.z,
-      sphere2.position.x, sphere2.position.y, sphere2.position.z
-    ];
+    if (sphere1 === sphere2) {
+      isLoop = true;
+      const loopRadius = 1.5;
+      positions = this.createLoopEdgePoints(sphere1, loopRadius);
+    } else {
+      const parallelCount = this.edges.filter(edge =>
+        (!edge.isLoop) &&
+        ((edge.sphere1 === sphere1 && edge.sphere2 === sphere2) ||
+         (edge.sphere1 === sphere2 && edge.sphere2 === sphere1))
+      ).length;
+
+      const baseOffset = 0.5;
+      const offsetIndex = Math.ceil(parallelCount / 2);
+      const sign = (parallelCount % 2 === 0) ? 1 : -1;
+      usedOffset = sign * offsetIndex * baseOffset;
+      positions = this.createCurvedEdgePoints(sphere1, sphere2, usedOffset);
+    }
 
     const geometry = new LineGeometry();
     geometry.setPositions(positions);
@@ -345,9 +397,20 @@ export class Graph {
     line.computeLineDistances();
     this.scene.add(line);
 
-    // Store edge for potential deletion later
-    this.edges.push({ line, sphere1, sphere2 });
+    const newEdge: Edge = {
+      line,
+      sphere1,
+      sphere2,
+      isLoop,
+      parallelOffset: usedOffset,
+    };
+    this.edges.push(newEdge);
 
+    if (!isLoop) {
+      this.updateParallelEdgesForNodes(sphere1, sphere2);
+    }
+
+    // Create and attach an edge label.
     const div = document.createElement('div');
     div.className = 'edge-label';
     div.textContent = 'e' + edgeId;
@@ -356,10 +419,27 @@ export class Graph {
     div.style.fontSize = '16px';
 
     const label = new CSS2DObject(div);
-    const midPoint = new THREE.Vector3().addVectors(sphere1.position, sphere2.position).multiplyScalar(0.5);
-    const midPointLocal = midPoint.clone();
-    line.worldToLocal(midPointLocal);
-    label.position.copy(midPointLocal);
+    if (!isLoop) {
+      const midIdx = Math.floor(positions.length / 6);
+      const midPoint = new THREE.Vector3(
+        positions[midIdx * 3],
+        positions[midIdx * 3 + 1],
+        positions[midIdx * 3 + 2]
+      );
+      const midPointLocal = midPoint.clone();
+      line.worldToLocal(midPointLocal);
+      label.position.copy(midPointLocal);
+    } else {
+      const quarterIdx = Math.floor(positions.length / 4);
+      const labelPoint = new THREE.Vector3(
+        positions[quarterIdx * 3],
+        positions[quarterIdx * 3 + 1],
+        positions[quarterIdx * 3 + 2]
+      );
+      const labelPointLocal = labelPoint.clone();
+      line.worldToLocal(labelPointLocal);
+      label.position.copy(labelPointLocal);
+    }
     line.add(label);
   }
 
@@ -446,24 +526,82 @@ export class Graph {
     this.edgeCounter = this.edges.length;
   }
 
+  // -----------------------------
+  // Update Edges When a Node Moves (e.g., during dragging)
+  // -----------------------------
+
   private updateEdgesForNode(node: THREE.Mesh): void {
     this.edges.forEach(edge => {
       if (edge.sphere1 === node || edge.sphere2 === node) {
-        const posArray = [
-          edge.sphere1.position.x, edge.sphere1.position.y, edge.sphere1.position.z,
-          edge.sphere2.position.x, edge.sphere2.position.y, edge.sphere2.position.z,
-        ];
-        (edge.line as any).geometry.setPositions(posArray);
-        // Update label position.
+        let positions: number[] = [];
+        if (edge.isLoop) {
+          const loopRadius = 1.5;
+          positions = this.createLoopEdgePoints(edge.sphere1, loopRadius);
+        } else {
+          const offset = edge.parallelOffset || 0;
+          positions = this.createCurvedEdgePoints(edge.sphere1, edge.sphere2, offset);
+        }
+        (edge.line as any).geometry.setPositions(positions);
         edge.line.children.forEach(child => {
           if (child instanceof CSS2DObject) {
-            const mid = new THREE.Vector3().addVectors(edge.sphere1.position, edge.sphere2.position).multiplyScalar(0.5);
+            let mid: THREE.Vector3;
+            if (!edge.isLoop) {
+              const midIdx = Math.floor(positions.length / 6);
+              mid = new THREE.Vector3(
+                positions[midIdx * 3],
+                positions[midIdx * 3 + 1],
+                positions[midIdx * 3 + 2]
+              );
+            } else {
+              const quarterIdx = Math.floor(positions.length / 4);
+              mid = new THREE.Vector3(
+                positions[quarterIdx * 3],
+                positions[quarterIdx * 3 + 1],
+                positions[quarterIdx * 3 + 2]
+              );
+            }
             const midLocal = mid.clone();
             edge.line.worldToLocal(midLocal);
             child.position.copy(midLocal);
           }
         });
       }
+    });
+  }
+
+  // -----------------------------
+  // Helper to Update Parallel Edge Offsets Between Two Nodes
+  // -----------------------------
+
+  private updateParallelEdgesForNodes(sphere1: THREE.Mesh, sphere2: THREE.Mesh): void {
+    const baseOffset = 0.5;
+    const relatedEdges = this.edges.filter(edge =>
+      !edge.isLoop &&
+      ((edge.sphere1 === sphere1 && edge.sphere2 === sphere2) ||
+       (edge.sphere1 === sphere2 && edge.sphere2 === sphere1))
+    );
+    const count = relatedEdges.length;
+    if (count <= 1) return;
+    relatedEdges.sort((a, b) => (a.parallelOffset || 0) - (b.parallelOffset || 0));
+    const mid = Math.floor(count / 2);
+    relatedEdges.forEach((edge, i) => {
+      const newOffset = (i - mid) * baseOffset;
+      edge.parallelOffset = newOffset;
+      const positions = this.createCurvedEdgePoints(edge.sphere1, edge.sphere2, newOffset);
+      (edge.line as any).geometry.setPositions(positions);
+      edge.line.children.forEach(child => {
+        if (child instanceof CSS2DObject) {
+          const midIdx = Math.floor(positions.length / 6);
+          const midPoint = new THREE.Vector3(
+            positions[midIdx * 3],
+            positions[midIdx * 3 + 1],
+            positions[midIdx * 3 + 2]
+          );
+          const midPointLocal = midPoint.clone();
+          edge.line.worldToLocal(midPointLocal);
+          child.position.copy(midPointLocal);
+        }
+      });
     });
   }
 
