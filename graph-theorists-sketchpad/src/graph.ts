@@ -12,6 +12,7 @@ interface Edge {
   isLoop: boolean;
   parallelOffset?: number;
   isBridge?: boolean;
+  arrowHead?: THREE.ArrowHelper;
 }
 
 export class Graph {
@@ -46,6 +47,11 @@ export class Graph {
 
   // Dragging functionality flag
   private dragActive: boolean = false;
+
+  // NEW: flag whether the graph is directed.
+  public directed: boolean = false;
+  public arrowSize: number = 1;
+  public arrowColor: number = 0xffffff;
 
   // Getter methods for node and edge counts
   public getNodeCount(): number {
@@ -475,6 +481,11 @@ export class Graph {
       label.position.copy(labelPointLocal);
     }
     line.add(label);
+
+    if (this.directed && !isLoop) {
+      this.addArrowhead(newEdge);
+    }
+
     this.onGraphChanged();
   }
 
@@ -579,6 +590,7 @@ export class Graph {
           positions = this.createCurvedEdgePoints(edge.sphere1, edge.sphere2, offset);
         }
         (edge.line as any).geometry.setPositions(positions);
+
         edge.line.children.forEach(child => {
           if (child instanceof CSS2DObject) {
             let mid: THREE.Vector3;
@@ -602,6 +614,81 @@ export class Graph {
             child.position.copy(midLocal);
           }
         });
+
+        if (!edge.isLoop) {
+          this.addArrowhead(edge);
+        }
+      }
+    });
+  }
+
+  // -----------------------------
+  // Helper Method to Add Arrowheads
+  // -----------------------------
+  private addArrowhead(edge: Edge): void {
+    if (edge.isLoop) return;
+
+    const sphere1Pos = edge.sphere1.position;
+    const sphere2Pos = edge.sphere2.position;
+    const offset = edge.parallelOffset || 0;
+
+    const midPoint = new THREE.Vector3().addVectors(sphere1Pos, sphere2Pos).multiplyScalar(0.5);
+    const direction = new THREE.Vector3().subVectors(sphere2Pos, sphere1Pos);
+    const perp = new THREE.Vector3(-direction.z, 0, direction.x).normalize();
+    const controlPoint = midPoint.clone().add(perp.multiplyScalar(offset));
+
+    const curve = new THREE.QuadraticBezierCurve3(
+      sphere1Pos,
+      controlPoint,
+      sphere2Pos
+    );
+
+    const exactMidpoint = curve.getPoint(0.5);
+
+    const tangent = curve.getTangent(0.5).normalize();
+    
+    this.removeArrowhead(edge);
+
+    const arrowHelper = new THREE.ArrowHelper(
+      tangent,
+      exactMidpoint,
+      this.arrowSize,
+      this.arrowColor,
+      this.arrowSize * 0.5,
+      this.arrowSize * 0.3
+    );
+
+    arrowHelper.visible = this.directed;
+    
+    this.scene.add(arrowHelper);
+    edge.arrowHead = arrowHelper;
+  }
+
+  // -----------------------------
+  // Method to Toggle Arrowheads and Update Positions
+  // -----------------------------
+  public updateDirectedEdges(): void {
+    this.edges.forEach(edge => {
+      if (!edge.isLoop) {
+        if (edge.sphere1 && edge.sphere2) {
+          this.addArrowhead(edge);
+        }
+      }
+    });
+  }
+
+  // -----------------------------
+  // Arrow Size Setter Method
+  // -----------------------------
+  public updateArrowSizes(): void {
+    this.edges.forEach(edge => {
+      if (edge.arrowHead) {
+        
+        edge.arrowHead.setLength(
+          this.arrowSize, 
+          this.arrowSize * 0.5, 
+          this.arrowSize * 0.3
+        );
       }
     });
   }
@@ -867,6 +954,16 @@ export class Graph {
   }
 
   // -----------------------------
+  // Helper Method to Remove Arrowheads
+  // -----------------------------
+  private removeArrowhead(edge: Edge): void {
+    if (edge.arrowHead) {
+      this.scene.remove(edge.arrowHead);
+      delete edge.arrowHead;
+    }
+  }
+
+  // -----------------------------
   // Update Method for Animation Loop
   // -----------------------------
 
@@ -883,5 +980,34 @@ export class Graph {
         (edge.line as any).material.needsUpdate = true;
       }
     });
+  }
+
+  // -----------------------------
+  // Method to clear the entire graph
+  // -----------------------------
+  public clearGraph(): void {
+    this.edges.forEach(edge => {
+      this.removeArrowhead(edge);
+      edge.line.children
+        .filter(child => child instanceof CSS2DObject)
+        .forEach(label => edge.line.remove(label));
+      this.scene.remove(edge.line);
+    });
+
+    this.spheres.forEach(node => {
+      node.children
+        .filter(child => child instanceof CSS2DObject)
+        .forEach(label => node.remove(label));
+      this.scene.remove(node);
+    });
+
+    this.edges = [];
+    this.spheres = [];
+    this.nodeCounter = 0;
+    this.edgeCounter = 0;
+    this.firstSelectedSphere = null;
+    this.selectedEdge = null;
+
+    this.onGraphChanged();
   }
 }

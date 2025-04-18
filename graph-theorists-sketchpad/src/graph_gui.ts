@@ -40,8 +40,12 @@ export class GraphGUI {
             },
             clearGraph: () => {
                 console.log('Clear Graph button pressed.');
-                // Implement method to clear all nodes and edges.
-            }
+                if (confirm("Are you sure you want to clear the entire graph?")) {
+                    this.graph.clearGraph();
+                }
+            },
+            directed: this.graph.directed,
+            arrowSize: this.graph.arrowSize,
         };
 
         this.setupGUI();
@@ -89,6 +93,16 @@ export class GraphGUI {
             if (this.graph.getSelectedNode()) {
                 this.graph.updateNodeLabel(newLabel);
             }
+        });
+
+        this.gui.add(this.params, 'directed').name("Directed Graph").onChange((value: boolean) => {
+            this.graph.directed = value;
+            this.graph.updateDirectedEdges();
+        });
+
+        this.gui.add(this.params, 'arrowSize', 0.2, 5).name("Arrow Size").onChange((value: number) => {
+            this.graph.arrowSize = value;
+            this.graph.updateArrowSizes();
         });
 
         this.gui.add(this.params, 'viewGraphComponents').name("View Graph Components");
