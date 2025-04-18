@@ -63,19 +63,6 @@ graph.onGraphChanged = () => {
   if (degreeInfo) degreeInfo.style.display = 'none';
 };
 
-graph.onNodeSelected = (node) => {
-  const deg = graph.getDegree(node);
-  if (degreeInfo) {
-    degreeInfo.textContent = `Degree: ${deg}`;
-    degreeInfo.style.display = 'inline';
-  }
-};
-
-// When the user deselects:
-graph.onNodeDeselected = () => {
-  if (degreeInfo) degreeInfo.style.display = 'none';
-};
-
 graph.onGraphChanged();
 
 // Animation loop

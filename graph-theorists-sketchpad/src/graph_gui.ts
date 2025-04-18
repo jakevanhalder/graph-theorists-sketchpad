@@ -20,6 +20,18 @@ export class GraphGUI {
             nodeRadius: 0.5,
             edgeThickness: 5,
             nodeLabel: '',
+            viewGraphComponents: () => {
+                console.log('View Graph Components button pressed.');
+                this.graph.highlightComponents();
+            },
+            viewBridgeEdges: () => {
+                console.log('View Bridge Edges button pressed.');
+                this.graph.highlightBridges();
+            },
+            stopChecks: () => {
+                console.log('Stop Checks button pressed.');
+                this.graph.resetHighlights();
+            },
             clearGraph: () => {
                 console.log('Clear Graph button pressed.');
                 // Implement method to clear all nodes and edges.
@@ -40,8 +52,18 @@ export class GraphGUI {
 
             (this.nodeFolder.domElement as HTMLElement).style.display = 'block';
 
+            const deg = this.graph.getDegree(node);
+            const degreeInfo = document.getElementById('degree-info');
+            if (degreeInfo) {
+                degreeInfo.textContent = `Degree: ${deg}`;
+                degreeInfo.style.display = 'inline';
+            }
+
             this.graph.onNodeDeselected = () => {
                 (this.nodeFolder.domElement as HTMLElement).style.display = 'none';
+                if (degreeInfo) {
+                    degreeInfo.style.display = 'none';
+                }
             };
         };
     }
@@ -63,6 +85,9 @@ export class GraphGUI {
             }
         });
 
+        this.gui.add(this.params, 'viewGraphComponents').name("View Graph Components");
+        this.gui.add(this.params, 'viewBridgeEdges').name("View Bridge Edges");
+        this.gui.add(this.params, 'stopChecks').name('Stop Checks');
         this.gui.add(this.params, 'clearGraph').name('Clear Graph');
     }
 }

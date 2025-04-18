@@ -10,11 +10,12 @@ interface Edge {
   sphere1: THREE.Mesh;
   sphere2: THREE.Mesh;
   isLoop: boolean;
-  parallelOffset?: number; 
+  parallelOffset?: number;
+  isBridge?: boolean;
 }
 
 export class Graph {
-  public onGraphChanged: () => void = () => {};
+  public onGraphChanged: () => void = () => { };
 
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
@@ -50,7 +51,7 @@ export class Graph {
   public getNodeCount(): number {
     return this.spheres.length;
   }
-  
+
   public getEdgeCount(): number {
     return this.edges.length;
   }
@@ -407,7 +408,7 @@ export class Graph {
       const parallelCount = this.edges.filter(edge =>
         !edge.isLoop &&
         ((edge.sphere1 === sphere1 && edge.sphere2 === sphere2) ||
-         (edge.sphere1 === sphere2 && edge.sphere2 === sphere1))
+          (edge.sphere1 === sphere2 && edge.sphere2 === sphere1))
       ).length;
 
       const baseOffset = 0.5;
@@ -614,7 +615,7 @@ export class Graph {
     const relatedEdges = this.edges.filter(edge =>
       !edge.isLoop &&
       ((edge.sphere1 === sphere1 && edge.sphere2 === sphere2) ||
-       (edge.sphere1 === sphere2 && edge.sphere2 === sphere1))
+        (edge.sphere1 === sphere2 && edge.sphere2 === sphere1))
     );
     const count = relatedEdges.length;
     if (count <= 1) return;
@@ -646,6 +647,156 @@ export class Graph {
   }
 
   // -----------------------------
+  // Connected Component and Bridge Detection Methods
+  // -----------------------------
+
+  public getConnectedComponents(): THREE.Mesh[][] {
+    const nodeCount = this.spheres.length;
+    if (nodeCount === 0) return [];
+
+    const nodeToIndex = new Map<THREE.Mesh, number>();
+    this.spheres.forEach((node, idx) => nodeToIndex.set(node, idx));
+
+    const adj: number[][] = Array.from({ length: nodeCount }, () => []);
+    this.edges.forEach(edge => {
+      if (edge.sphere1 === edge.sphere2) return;
+      const i = nodeToIndex.get(edge.sphere1)!;
+      const j = nodeToIndex.get(edge.sphere2)!;
+      adj[i].push(j);
+      adj[j].push(i);
+    });
+
+    const visited = new Array(nodeCount).fill(false);
+    const components: THREE.Mesh[][] = [];
+    const dfs = (i: number, comp: THREE.Mesh[]) => {
+      visited[i] = true;
+      comp.push(this.spheres[i]);
+      for (const neighbor of adj[i]) {
+        if (!visited[neighbor]) {
+          dfs(neighbor, comp);
+        }
+      }
+    };
+
+    for (let i = 0; i < nodeCount; i++) {
+      if (!visited[i]) {
+        const comp: THREE.Mesh[] = [];
+        dfs(i, comp);
+        components.push(comp);
+      }
+    }
+    return components;
+  }
+
+  public highlightComponents(): void {
+    const palette = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0'];
+    const components = this.getConnectedComponents();
+    console.log(`Found ${components.length} connected components.`);
+    components.forEach((component, index) => {
+      const color = new THREE.Color(palette[index % palette.length]);
+      component.forEach(node => {
+        if (node.material instanceof THREE.MeshPhongMaterial) {
+          node.material.color.copy(color);
+        }
+      });
+    });
+  }
+
+  public detectBridgeEdges(): Edge[] {
+    const n = this.spheres.length;
+    const nodeToIndex = new Map<THREE.Mesh, number>();
+    this.spheres.forEach((node, idx) => nodeToIndex.set(node, idx));
+
+    const adj: number[][] = Array.from({ length: n }, () => []);
+    const edgeCount = new Map<string, number>();
+    this.edges.forEach(edge => {
+      if (edge.sphere1 === edge.sphere2) return;
+      const i = nodeToIndex.get(edge.sphere1)!;
+      const j = nodeToIndex.get(edge.sphere2)!;
+      const key = [Math.min(i, j), Math.max(i, j)].join('-');
+      edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
+      adj[i].push(j);
+      adj[j].push(i);
+    });
+
+    const disc: number[] = new Array(n).fill(-1);
+    const low: number[] = new Array(n).fill(-1);
+    let time = 0;
+    const bridges: Edge[] = [];
+
+    const dfs = (u: number, parent: number) => {
+      disc[u] = low[u] = time++;
+      for (const v of adj[u]) {
+        if (disc[v] === -1) {
+          dfs(v, u);
+          low[u] = Math.min(low[u], low[v]);
+          if (low[v] > disc[u]) {
+            const key = [Math.min(u, v), Math.max(u, v)].join('-');
+            if ((edgeCount.get(key) || 0) === 1) {
+              this.edges.forEach(edge => {
+                if (edge.sphere1 !== edge.sphere2) {
+                  const i1 = nodeToIndex.get(edge.sphere1)!;
+                  const i2 = nodeToIndex.get(edge.sphere2)!;
+                  if ((i1 === u && i2 === v) || (i1 === v && i2 === u)) {
+                    bridges.push(edge);
+                  }
+                }
+              });
+            }
+          }
+        } else if (v !== parent) {
+          low[u] = Math.min(low[u], disc[v]);
+        }
+      }
+    };
+
+    for (let i = 0; i < n; i++) {
+      if (disc[i] === -1) {
+        dfs(i, -1);
+      }
+    }
+    return bridges;
+  }
+
+  public highlightBridges(): void {
+    this.edges.forEach(edge => {
+      edge.isBridge = false;
+      if ((edge.line as any).material) {
+        (edge.line as any).material.color.set(0xff0000);
+      }
+    });
+
+    const bridges = this.detectBridgeEdges();
+    console.log(`Detected ${bridges.length} bridge edge(s).`);
+    bridges.forEach(edge => {
+      edge.isBridge = true;
+      if ((edge.line as any).material) {
+        (edge.line as any).material.color.set(0xff0000);
+      }
+    });
+  }
+
+  public resetHighlights(): void {
+    const defaultNodeColor = new THREE.Color('#0077ff');
+    const defaultEdgeColor = new THREE.Color(0xff0000);
+
+    this.spheres.forEach(node => {
+      if (node.material instanceof THREE.MeshPhongMaterial) {
+        node.material.color.copy(defaultNodeColor);
+      }
+    });
+
+    this.edges.forEach(edge => {
+      edge.isBridge = false;
+      if ((edge.line as any).material) {
+        (edge.line as any).material.color.copy(defaultEdgeColor);
+      }
+    });
+
+    console.log('Highlights and checks have been reset.');
+  }
+
+  // -----------------------------
   // Update Method for Animation Loop
   // -----------------------------
 
@@ -654,5 +805,13 @@ export class Graph {
       const scaleFactor = 1 + 0.05 * Math.sin(Date.now() * 0.005);
       this.previewSphere.scale.set(scaleFactor, scaleFactor, scaleFactor);
     }
+
+    this.edges.forEach(edge => {
+      if (edge.isBridge && (edge.line as any).material) {
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() * 0.005);
+        (edge.line as any).material.color.setRGB(1, pulse * 0.3, pulse * 0.3);
+        (edge.line as any).material.needsUpdate = true;
+      }
+    });
   }
 }
