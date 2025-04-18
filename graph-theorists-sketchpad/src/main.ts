@@ -47,6 +47,18 @@ const graph = new Graph(scene, camera, renderer, controls);
 // Instantiate our GUI
 new GraphGUI(graph);
 
+// Status bar
+const statusBar = document.getElementById('status-bar');
+
+// Whenever the graph changes, update the status bar:
+graph.onGraphChanged = () => {
+  if (statusBar) {
+    statusBar.textContent = `Vertices: ${graph.getNodeCount()} | Edges: ${graph.getEdgeCount()}`;
+  }
+};
+
+graph.onGraphChanged();
+
 // Animation loop
 function animate() {
   graph.update();

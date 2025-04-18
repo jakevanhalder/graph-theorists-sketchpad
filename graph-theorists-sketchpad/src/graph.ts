@@ -14,6 +14,8 @@ interface Edge {
 }
 
 export class Graph {
+  public onGraphChanged: () => void = () => {};
+
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
@@ -43,6 +45,15 @@ export class Graph {
 
   // Dragging functionality flag
   private dragActive: boolean = false;
+
+  // Getter methods for node and edge counts
+  public getNodeCount(): number {
+    return this.spheres.length;
+  }
+  
+  public getEdgeCount(): number {
+    return this.edges.length;
+  }
 
   constructor(
     scene: THREE.Scene,
@@ -285,6 +296,7 @@ export class Graph {
     sphere.add(label);
 
     sphere.userData.labelObject = label;
+    this.onGraphChanged();
   }
 
   private selectNode(clickedSphere: THREE.Mesh): void {
@@ -457,6 +469,7 @@ export class Graph {
       label.position.copy(labelPointLocal);
     }
     line.add(label);
+    this.onGraphChanged();
   }
 
   private deleteNodeAndEdges(node: THREE.Mesh): void {
@@ -480,6 +493,7 @@ export class Graph {
 
     this.updateAllNodeLabels();
     this.updateAllEdgeLabels();
+    this.onGraphChanged();
   }
 
   private deleteEdge(edge: Edge): void {
@@ -491,6 +505,7 @@ export class Graph {
     this.edges = this.edges.filter(e => e !== edge);
 
     this.updateAllEdgeLabels();
+    this.onGraphChanged();
   }
 
   private selectEdge(edge: Edge): void {
