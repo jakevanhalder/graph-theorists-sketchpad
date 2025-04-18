@@ -34,14 +34,40 @@ export class GraphGUI {
                 const message = result ? "Graph is bipartite." : "Graph is not bipartite.";
                 alert(message);
             },
+            computeChromaticNumber: () => {
+                console.log('Compute Chromatic Number button pressed.');
+                const chromaticNumber = this.graph.applyGraphColoring();
+                const chromaticNumberElement = document.getElementById('chromatic-number');
+                const chromaticNumberInfo = document.getElementById('chromatic-number-info');
+                
+                if (chromaticNumberElement && chromaticNumberInfo) {
+                    chromaticNumberElement.textContent = chromaticNumber.toString();
+                    chromaticNumberInfo.style.display = 'inline';
+                }
+                
+                const message = `Graph chromatic number: ${chromaticNumber}`;
+                console.log(message);
+            },
             stopChecks: () => {
                 console.log('Stop Checks button pressed.');
                 this.graph.resetHighlights();
+
+                const chromaticNumberInfo = document.getElementById('chromatic-number-info');
+                if (chromaticNumberInfo) {
+                    chromaticNumberInfo.style.display = 'none';
+                }
             },
             clearGraph: () => {
                 console.log('Clear Graph button pressed.');
                 if (confirm("Are you sure you want to clear the entire graph?")) {
                     this.graph.clearGraph();
+
+                    const chromaticNumberElement = document.getElementById('chromatic-number');
+                    const chromaticNumberInfo = document.getElementById('chromatic-number-info');
+                    if (chromaticNumberElement && chromaticNumberInfo) {
+                        chromaticNumberElement.textContent = '0';
+                        chromaticNumberInfo.style.display = 'none';
+                    }
                 }
             },
             directed: this.graph.directed,
@@ -108,6 +134,7 @@ export class GraphGUI {
         this.gui.add(this.params, 'viewGraphComponents').name("View Graph Components");
         this.gui.add(this.params, 'viewBridgeEdges').name("View Bridge Edges");
         this.gui.add(this.params, 'checkBipartite').name('Check Bipartite');
+        this.gui.add(this.params, 'computeChromaticNumber').name('Compute Chromatic Number');
         this.gui.add(this.params, 'stopChecks').name('Stop Checks');
         this.gui.add(this.params, 'clearGraph').name('Clear Graph');
     }

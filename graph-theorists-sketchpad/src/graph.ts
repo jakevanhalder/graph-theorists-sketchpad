@@ -880,6 +880,11 @@ export class Graph {
       }
     });
 
+    const chromaticNumberInfo = document.getElementById('chromatic-number-info');
+    if (chromaticNumberInfo) {
+      chromaticNumberInfo.style.display = 'none';
+    }
+
     console.log('Highlights and checks have been reset.');
   }
 
@@ -961,6 +966,83 @@ export class Graph {
       this.scene.remove(edge.arrowHead);
       delete edge.arrowHead;
     }
+  }
+
+  // -----------------------------
+  // Chromatic Number and Graph Coloring Methods
+  // -----------------------------
+
+  public computeChromaticNumber(): { chromaticNumber: number, colorAssignment: Map<THREE.Mesh, number> } {
+    const n = this.spheres.length;
+    if (n === 0) return { chromaticNumber: 0, colorAssignment: new Map() };
+
+    const nodeToIndex = new Map<THREE.Mesh, number>();
+    this.spheres.forEach((node, idx) => nodeToIndex.set(node, idx));
+    
+    const adj: number[][] = Array.from({ length: n }, () => []);
+    this.edges.forEach(edge => {
+      const i = nodeToIndex.get(edge.sphere1)!;
+      const j = nodeToIndex.get(edge.sphere2)!;
+      adj[i].push(j);
+      adj[j].push(i);
+    });
+
+    const degrees: { node: THREE.Mesh, degree: number, index: number }[] = this.spheres.map((node, idx) => ({
+      node,
+      degree: this.getDegree(node),
+      index: idx
+    }));
+    
+    degrees.sort((a, b) => b.degree - a.degree);
+    
+    const colors: number[] = new Array(n).fill(-1);
+    let maxColor = 0;
+    
+    for (const { index } of degrees) {
+      const usedColors = new Set<number>();
+      for (const neighbor of adj[index]) {
+        if (colors[neighbor] !== -1) {
+          usedColors.add(colors[neighbor]);
+        }
+      }
+      
+      let color = 0;
+      while (usedColors.has(color)) {
+        color++;
+      }
+      
+      colors[index] = color;
+      maxColor = Math.max(maxColor, color);
+    }
+    
+    const colorAssignment = new Map<THREE.Mesh, number>();
+    this.spheres.forEach((node, idx) => {
+      colorAssignment.set(node, colors[idx]);
+    });
+    
+    return {
+      chromaticNumber: maxColor + 1,
+      colorAssignment
+    };
+  }
+  
+  public applyGraphColoring(): number {
+    const { chromaticNumber, colorAssignment } = this.computeChromaticNumber();
+    
+    const palette = [
+      '#e6194b', '#3cb44b', '#ffe119', '#4363d8', 
+      '#f58231', '#911eb4', '#46f0f0', '#f032e6',
+      '#bcf60c', '#fabebe', '#008080', '#e6beff', 
+      '#9a6324', '#fffac8', '#800000', '#aaffc3'
+    ];
+    
+    for (const [node, colorIndex] of colorAssignment.entries()) {
+      if (node.material instanceof THREE.MeshPhongMaterial) {
+        node.material.color.set(palette[colorIndex % palette.length]);
+      }
+    }
+    
+    return chromaticNumber;
   }
 
   // -----------------------------
